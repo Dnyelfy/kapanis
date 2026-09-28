@@ -209,15 +209,10 @@
 
   <section aria-labelledby="check-h">
     <h2 id="check-h">Referee check</h2>
-    <p class="lede">Every post is re-verified here: its Ed25519 signature over <code>room|nonce|text</code> is checked against the did:key that wrote it. No key ever leaves or enters this page.</p>
+    <p class="lede">The referee key is pinned in this page, taken from the close-1 launch record. A post counts only if it comes from that key and its Ed25519 signature over <code>room|nonce|text</code> checks out. Anything else is rejected and flagged here.</p>
     <div class="check-grid" id="check-grid"></div>
-    <p class="signer" id="signer-line"></p>
-    <div class="pin">
-      <label for="pin-input" class="price-meta" style="flex-basis:100%">Paste the referee DID from the official launch record to compare:</label>
-      <input id="pin-input" type="text" placeholder="did:key:z6Mk…" autocomplete="off" spellcheck="false">
-      <button id="pin-btn" type="button">Compare</button>
-    </div>
-    <p class="pin-result" id="pin-result" aria-live="polite"></p>
+    <p class="signer">Pinned referee key: <span class="did" id="pinned-did"></span></p>
+    <p class="pin-result" id="signer-line" aria-live="polite"></p>
   </section>
 
   <footer>
@@ -237,6 +232,8 @@ const CONTEST = {
   finalAt: Date.parse("2026-10-04T10:00:00Z"),
   window: 0.05,
 };
+// The referee key pinned in the close-1 launch record. Posts from any other key are rejected.
+const REFEREE = "did:key:z6MkowHQwsx9xr84WbWN3YCnKutyBnBXkT1ChKY4uEAAMzte";
 const ROOMS = ["d-close1-price", "d-close1-flow", "d-close1-state", "d-close1-positions", "d-close1-pnl"];
 
 // Nonces can be 19 digits, past 2^53: keep them as exact strings before JSON.parse.
@@ -283,6 +280,7 @@ function b64urlDecode(s) {
 
 function verifyRecord(room, rec, naclLib) {
   if (!rec || typeof rec.sig !== "string" || rec.nonce === undefined) return false;
+  if (rec.from !== REFEREE) return false;
   const pk = didPublicKey(rec.from);
   if (!pk) return false;
   let sig;
@@ -588,54 +586,44 @@ function renderBoards() {
 function renderCheck() {
   const grid = $("check-grid");
   grid.innerHTML = "";
-  const signers = new Set();
+  let rejected = 0, foreign = 0, total = 0;
   for (const name of ROOMS) {
     const r = state.rooms[name];
     const div = document.createElement("div");
+    const b = document.createElement("b");
+    b.textContent = name;
+    div.appendChild(b);
     if (!r) {
       div.className = "room bad";
-      div.innerHTML = `<b>${name}</b>Not read`;
+      div.appendChild(document.createTextNode("Not read"));
     } else {
-      const total = r.records.length;
+      const n = r.records.length;
       const ok = r.verified.filter(Boolean).length;
-      r.records.forEach((rec, i) => { if (r.verified[i]) signers.add(rec.from); });
-      div.className = "room " + (total && ok === total ? "good" : "bad");
-      div.innerHTML = `<b>${name}</b>${ok} of ${total} posts verified`;
+      total += n;
+      rejected += n - ok;
+      foreign += r.records.filter((rec) => rec && rec.from !== REFEREE).length;
+      div.className = "room " + (n && ok === n ? "good" : "bad");
+      div.appendChild(document.createTextNode(`${ok} of ${n} posts from the referee, signature verified`));
     }
     grid.appendChild(div);
   }
+  $("pinned-did").textContent = REFEREE;
   const line = $("signer-line");
-  if (signers.size === 1) {
-    const d = [...signers][0];
-    line.innerHTML = "All verified posts are signed by one key: <span class=\"did\"></span>";
-    line.querySelector(".did").textContent = d;
-  } else if (signers.size > 1) {
-    line.textContent = `Verified posts come from ${signers.size} different keys. The referee should be one key: check the launch record.`;
+  if (!total) {
+    line.textContent = "";
+    line.className = "pin-result";
+  } else if (rejected === 0) {
+    line.textContent = "Every post in all five rooms comes from the pinned referee key.";
+    line.className = "pin-result ok";
   } else {
-    line.textContent = "No verified posts yet.";
-  }
-  state.signers = signers;
-  comparePin(false);
-}
-
-function comparePin(fromClick) {
-  const val = $("pin-input").value.trim();
-  const out = $("pin-result");
-  if (!val) { out.textContent = fromClick ? "Paste a did:key first." : ""; out.className = "pin-result"; return; }
-  if (!didPublicKey(val)) { out.textContent = "That is not a valid Ed25519 did:key."; out.className = "pin-result bad"; return; }
-  const s = state.signers || new Set();
-  if (s.size === 1 && s.has(val)) {
-    out.textContent = "Match: every verified post was signed by this DID.";
-    out.className = "pin-result ok";
-  } else {
-    out.textContent = "No match: the posts here were not all signed by this DID.";
-    out.className = "pin-result bad";
+    line.textContent = `${rejected} post${rejected === 1 ? "" : "s"} rejected` +
+      (foreign ? `, ${foreign} signed by a key that is not the referee` : "") +
+      ". Rejected posts are left out of everything on this page.";
+    line.className = "pin-result bad";
   }
 }
 
 $("refresh").addEventListener("click", refresh);
-$("pin-btn").addEventListener("click", () => comparePin(true));
-$("pin-input").addEventListener("keydown", (e) => { if (e.key === "Enter") comparePin(true); });
 window.addEventListener("resize", () => { if (state.fetchedAt) renderStrip(); });
 setInterval(() => { if (state.fetchedAt) renderHero(); }, 30000);
 setInterval(refresh, 120000);

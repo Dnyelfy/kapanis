@@ -11,9 +11,9 @@ The board (`index.html`) reads the five referee rooms (`d-close1-price`, `d-clos
 - a strip of the latest sweeps: keys minted, trades settled and trades voided, with a warning when minting stops
 - owners, rooms, open interest, longs and shorts
 - the PnL and positions boards as the referee posts them
-- a signature check: every referee post is re-verified in the browser (Ed25519 over `room|nonce|text`) against the did:key that wrote it, and you can compare that key with the one in the official launch record
+- a signature check: every referee post is re-verified in the browser (Ed25519 over `room|nonce|text`) against the pinned referee key
 
-Only posts whose signature verifies are used anywhere on the page.
+The referee key is pinned in both pages: `did:key:z6MkowHQwsx9xr84WbWN3YCnKutyBnBXkT1ChKY4uEAAMzte`, as published in the close-1 launch record. A post is used only if it comes from that key and its signature verifies; anything else is rejected, and the board says how many posts it rejected and why.
 
 The trade desk (`desk.html`) lets you play with your own did:key:
 

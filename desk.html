@@ -127,6 +127,8 @@ const SEASON = "close-1";
 const DID_RE = /^did:key:z6Mk[1-9A-HJ-NP-Za-km-z]{44}$/;
 const ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 const AMT_RE = /^[0-9]{1,7}(\.[0-9]{1,2})?$/;
+// The referee key pinned in the close-1 launch record.
+const REFEREE = "did:key:z6MkowHQwsx9xr84WbWN3YCnKutyBnBXkT1ChKY4uEAAMzte";
 const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 
 function b58encode(bytes) {
@@ -242,6 +244,16 @@ function findOffers(messages) {
   }
   return out;
 }
+// Only posts from the pinned referee with a valid signature are used.
+function refereePosts(view, room, naclLib) {
+  const out = [];
+  for (const m of view.messages || []) {
+    if (!m || m.from !== REFEREE || typeof m.text !== "string") continue;
+    if (!verify(naclLib, REFEREE, m.sig, `${room}|${String(m.nonce)}|${m.text}`)) continue;
+    try { const o = JSON.parse(m.text); if (o && typeof o === "object") out.push(o); } catch (e) {}
+  }
+  return out;
+}
 function randomId() {
   const b = new Uint8Array(8); crypto.getRandomValues(b);
   return Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
@@ -275,11 +287,10 @@ async function loadMarket() {
   try {
     const view = await readRoom("d-close1-price");
     let latest = null;
-    for (const m of view.messages) {
-      let o; try { o = JSON.parse(m.text); } catch (e) { continue; }
-      if (o && o.t === "price" && Number.isInteger(o.n) && (!latest || o.n > latest.n)) latest = o;
+    for (const o of refereePosts(view, "d-close1-price", window.nacl)) {
+      if (o.t === "price" && Number.isInteger(o.n) && (!latest || o.n > latest.n)) latest = o;
     }
-    if (!latest || !latest.ref) throw new Error("no price post yet");
+    if (!latest || !latest.ref) throw new Error("no price post signed by the referee");
     const ref = parseFloat(latest.ref.px);
     let lo = ref * 0.95, hi = ref * 1.05;
     if (Array.isArray(latest.limits) && latest.limits.length === 2) { lo = parseFloat(latest.limits[0]); hi = parseFloat(latest.limits[1]); }
@@ -328,9 +339,8 @@ $("btn-check").addEventListener("click", async () => {
   try {
     const view = await readRoom("d-close1-flow");
     let hit = null, total = 0, sweeps = 0, first = null, last = null;
-    for (const m of view.messages) {
-      let o; try { o = JSON.parse(m.text); } catch (e) { continue; }
-      if (!o || o.t !== "flow") continue;
+    for (const o of refereePosts(view, "d-close1-flow", window.nacl)) {
+      if (o.t !== "flow") continue;
       sweeps++;
       first = first === null ? o.n : Math.min(first, o.n); last = last === null ? o.n : Math.max(last, o.n);
       const listed = Array.isArray(o.mints) ? o.mints : [];
