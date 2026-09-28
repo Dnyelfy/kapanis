@@ -317,11 +317,13 @@ function bySweep(posts, type) {
   return [...map.values()].sort((a, b) => a.n - b.n);
 }
 
-function mintCount(flow) {
-  if (Array.isArray(flow.mints)) return flow.mints.length;
-  const n = num(flow.mints);
-  return n === null ? 0 : n;
+// The referee lists only part of each list and puts the rest under "omitted": count both.
+function listCount(flow, key) {
+  const listed = Array.isArray(flow[key]) ? flow[key].length : (num(flow[key]) || 0);
+  const omitted = flow.omitted && typeof flow.omitted === "object" ? (num(flow.omitted[key]) || 0) : 0;
+  return listed + omitted;
 }
+function mintCount(flow) { return listCount(flow, "mints"); }
 
 function mintHealth(flows) {
   if (!flows.length) return null;
@@ -509,7 +511,7 @@ function renderStrip() {
   const colW = w / cols;
   const mid = Math.round(h * 0.55);
   const maxMint = Math.max(1, ...flows.map(mintCount));
-  const maxTrades = Math.max(1, ...flows.map((f) => (num(f.settled) || 0) + (num(f.void) || 0)));
+  const maxTrades = Math.max(1, ...flows.map((f) => listCount(f, "settled") + listCount(f, "void")));
 
   ctx.fillStyle = c("--line");
   ctx.fillRect(0, mid, w, 1);
@@ -521,7 +523,7 @@ function renderStrip() {
     const mh = (m / maxMint) * (mid - 6);
     ctx.fillStyle = c("--teal");
     ctx.fillRect(x, mid - mh, bw, mh);
-    const s = num(f.settled) || 0, v = num(f.void) || 0;
+    const s = listCount(f, "settled"), v = listCount(f, "void");
     const room = h - mid - 4;
     const sh = (s / maxTrades) * room, vh = (v / maxTrades) * room;
     ctx.fillStyle = c("--ink");
@@ -540,7 +542,8 @@ function renderStrip() {
       : `No keys minted for ${hlth.quiet} sweeps. The last mint was at sweep ${hlth.lastMint}.`;
   } else {
     v.className = "verdict ok";
-    v.textContent = `Keys are being minted. The last mint was at sweep ${hlth.lastMint}.`;
+    const lastFlow = flows[flows.length - 1];
+    v.textContent = `Keys are being minted: ${mintCount(lastFlow).toLocaleString("en-US")} at sweep ${lastFlow.n}.`;
   }
 }
 
@@ -553,7 +556,7 @@ function renderLedger() {
   $("f-open").textContent = pos ? fmt(pos.open) : "—";
   $("f-longs").textContent = pos ? fmt(pos.longs) : "—";
   $("f-shorts").textContent = pos ? fmt(pos.shorts) : "—";
-  $("f-sv").textContent = fl ? `${fmtInt(fl.settled)} / ${fmtInt(fl.void)}` : "—";
+  $("f-sv").textContent = fl ? `${fmtInt(listCount(fl, "settled"))} / ${fmtInt(listCount(fl, "void"))}` : "—";
 }
 
 // The rules fix the rooms but not the shape of each "top" entry, so show entries as posted.

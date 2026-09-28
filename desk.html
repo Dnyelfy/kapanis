@@ -327,15 +327,19 @@ $("btn-check").addEventListener("click", async () => {
   setMsg("reg-msg", "Reading the flow room…");
   try {
     const view = await readRoom("d-close1-flow");
-    let hit = null, first = null, last = null;
+    let hit = null, total = 0, sweeps = 0, first = null, last = null;
     for (const m of view.messages) {
       let o; try { o = JSON.parse(m.text); } catch (e) { continue; }
       if (!o || o.t !== "flow") continue;
+      sweeps++;
       first = first === null ? o.n : Math.min(first, o.n); last = last === null ? o.n : Math.max(last, o.n);
-      if (Array.isArray(o.mints) && o.mints.includes(KEY.did)) hit = o.n;
+      const listed = Array.isArray(o.mints) ? o.mints : [];
+      const omitted = o.omitted && Number.isFinite(Number(o.omitted.mints)) ? Number(o.omitted.mints) : 0;
+      total += listed.length + omitted;
+      if (listed.includes(KEY.did)) hit = o.n;
     }
     if (hit !== null) setMsg("reg-msg", `Minted at sweep ${hit}. Your key holds its 10,000 POLF.`, "ok");
-    else setMsg("reg-msg", `Not in the mint lists of sweeps ${first ?? "?"}–${last ?? "?"}. If you registered recently, minting may be slow: check again later.`, "warn");
+    else setMsg("reg-msg", `The referee minted ${total.toLocaleString("en-US")} keys in sweeps ${first ?? "?"}–${last ?? "?"}, but it names only a few of them in public, so your key cannot be confirmed from here. Minting is running: your key gets its POLF when its turn comes.`, "warn");
   } catch (e) { setMsg("reg-msg", "Could not read the flow room: " + e.message, "bad"); }
 });
 
