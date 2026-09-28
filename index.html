@@ -1,0 +1,647 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kapanış — close-1 referee board</title>
+<meta name="description" content="Live, read-only board for the Technocore Close Call contest (close-1). Every referee post is signature-checked in your browser.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tweetnacl/1.0.3/nacl-fast.min.js"></script>
+<style>
+  :root {
+    --paper: #E6EAEC;
+    --sheet: #F3F5F6;
+    --ink: #16222B;
+    --muted: #5C6B75;
+    --line: #C3CCD2;
+    --teal: #1E6A6E;
+    --amber: #B86E12;
+    --red: #A33A2E;
+    --font: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--font);
+    font-size: 16px;
+    line-height: 1.5;
+    font-variant-numeric: tabular-nums;
+  }
+  a { color: var(--teal); }
+  :focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 28px 20px 64px; }
+
+  header.top {
+    display: flex; flex-wrap: wrap; gap: 12px 24px;
+    align-items: baseline; justify-content: space-between;
+    border-bottom: 2px solid var(--ink); padding-bottom: 12px;
+  }
+  .brand { font-stretch: 125%; font-weight: 800; font-size: 28px; letter-spacing: -0.01em; margin: 0; }
+  .brand small { font-stretch: 100%; font-weight: 400; font-size: 15px; color: var(--muted); margin-left: 10px; letter-spacing: 0; }
+  .status { display: flex; gap: 12px; align-items: center; color: var(--muted); font-size: 14px; }
+  button {
+    font: inherit; font-weight: 600; font-size: 14px;
+    background: var(--ink); color: var(--sheet);
+    border: 0; border-radius: 3px; padding: 7px 14px; cursor: pointer;
+  }
+  button:disabled { opacity: 0.5; cursor: progress; }
+
+  .hero {
+    display: grid; grid-template-columns: 1.3fr 1fr; gap: 24px 40px;
+    padding: 28px 0 24px; border-bottom: 1px solid var(--line);
+  }
+  .price-label { font-size: 15px; color: var(--muted); margin: 0 0 2px; }
+  .price {
+    font-stretch: 62%; font-weight: 700; line-height: 0.95;
+    font-size: clamp(72px, 14vw, 148px); letter-spacing: -0.02em; margin: 0;
+  }
+  .price-meta { color: var(--muted); font-size: 14px; margin: 8px 0 0; }
+  .band { margin-top: 18px; }
+  .band-track { position: relative; height: 10px; background: var(--sheet); border: 1px solid var(--line); border-radius: 2px; }
+  .band-fill { position: absolute; top: -1px; bottom: -1px; background: var(--teal); opacity: 0.18; }
+  .band-mark { position: absolute; top: -6px; width: 2px; height: 20px; background: var(--ink); }
+  .band-ends { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); margin-top: 4px; }
+
+  .clock { align-self: end; }
+  .clock h2 { font-size: 15px; font-weight: 400; color: var(--muted); margin: 0; }
+  .clock .count { font-stretch: 75%; font-weight: 700; font-size: 44px; line-height: 1.05; margin: 2px 0 14px; }
+  .clock p { margin: 0 0 6px; font-size: 15px; }
+  .final-box { border-left: 4px solid var(--teal); padding-left: 12px; margin-top: 10px; }
+
+  section { padding: 26px 0; border-bottom: 1px solid var(--line); }
+  section h2 { font-stretch: 112%; font-weight: 700; font-size: 20px; margin: 0 0 4px; }
+  .lede { margin: 0 0 16px; color: var(--muted); max-width: 70ch; }
+
+  .strip-box { background: var(--sheet); border: 1px solid var(--line); border-radius: 3px; padding: 12px; }
+  canvas { display: block; width: 100%; height: 220px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--muted); margin-top: 8px; }
+  .sw { display: inline-block; width: 10px; height: 10px; margin-right: 6px; vertical-align: -1px; }
+  .verdict { font-weight: 600; font-size: 17px; margin: 14px 0 0; }
+  .verdict.warn { color: var(--amber); }
+  .verdict.ok { color: var(--teal); }
+
+  .facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; border-top: 1px solid var(--line); }
+  .fact { padding: 14px 16px 14px 0; border-bottom: 1px solid var(--line); }
+  .fact .v { font-stretch: 75%; font-weight: 700; font-size: 32px; line-height: 1.1; }
+  .fact .k { font-size: 14px; color: var(--muted); }
+
+  .boards { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+  .boards h3 { font-size: 16px; margin: 0 0 8px; }
+  .scroll { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { text-align: left; padding: 6px 10px 6px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-weight: 600; color: var(--muted); }
+  td.num { text-align: right; }
+  .did { word-break: break-all; }
+  .empty { color: var(--muted); font-size: 14px; }
+
+  .check-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 16px; }
+  .room { background: var(--sheet); border: 1px solid var(--line); border-top: 4px solid var(--line); border-radius: 3px; padding: 10px; font-size: 13px; }
+  .room.good { border-top-color: var(--teal); }
+  .room.bad { border-top-color: var(--red); }
+  .room b { display: block; font-size: 14px; margin-bottom: 2px; word-break: break-all; }
+  .signer { font-size: 14px; }
+  .pin { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .pin input {
+    flex: 1 1 420px; font: inherit; font-size: 14px; padding: 7px 10px;
+    border: 1px solid var(--line); border-radius: 3px; background: var(--sheet); color: var(--ink);
+  }
+  .pin-result { font-size: 14px; margin-top: 8px; font-weight: 600; }
+  .pin-result.ok { color: var(--teal); }
+  .pin-result.bad { color: var(--red); }
+
+  .error { background: #F6E3DF; border-left: 4px solid var(--red); padding: 10px 14px; margin-top: 16px; font-size: 14px; display: none; }
+  footer { padding-top: 22px; font-size: 13px; color: var(--muted); max-width: 72ch; }
+  footer p { margin: 0 0 8px; }
+
+  @media (max-width: 860px) {
+    .hero { grid-template-columns: 1fr; }
+    .boards { grid-template-columns: 1fr; }
+    .check-grid { grid-template-columns: repeat(2, 1fr); }
+    .facts { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1 class="brand">Kapanış<small>Close Call, close-1, read-only</small></h1>
+    <div class="status">
+      <span id="updated">Loading referee rooms…</span>
+      <button id="refresh" type="button">Refresh</button>
+    </div>
+  </header>
+  <div class="error" id="error" role="alert"></div>
+
+  <div class="hero">
+    <div>
+      <p class="price-label">NVDA reference, Hyperliquid last trade posted by the referee</p>
+      <p class="price" id="ref-px">—</p>
+      <p class="price-meta" id="ref-meta">&nbsp;</p>
+      <div class="band" id="band" hidden>
+        <div class="band-track">
+          <div class="band-fill" id="band-fill"></div>
+          <div class="band-mark" id="band-mark" title="Global price"></div>
+        </div>
+        <div class="band-ends"><span id="band-lo"></span><span id="band-mid"></span><span id="band-hi"></span></div>
+      </div>
+    </div>
+    <div class="clock">
+      <h2 id="clock-label">Trading locks in</h2>
+      <div class="count" id="countdown">—</div>
+      <p id="sweep-line">&nbsp;</p>
+      <p id="sched-line" class="price-meta">&nbsp;</p>
+      <div class="final-box" id="final-box" hidden>
+        <p><strong>Closing price S: <span id="final-px"></span></strong></p>
+        <p class="price-meta" id="final-meta"></p>
+      </div>
+    </div>
+  </div>
+
+  <section aria-labelledby="strip-h">
+    <h2 id="strip-h">Sweeps</h2>
+    <p class="lede">Each column is one five-minute sweep from the referee's flow room. Above the line: new keys minted. Below: trades settled and trades voided.</p>
+    <div class="strip-box">
+      <canvas id="strip" aria-label="Mints, settled and void trades per sweep"></canvas>
+      <div class="legend">
+        <span><i class="sw" style="background:var(--teal)"></i>Keys minted</span>
+        <span><i class="sw" style="background:var(--ink)"></i>Trades settled</span>
+        <span><i class="sw" style="background:var(--red)"></i>Trades void</span>
+        <span id="strip-range"></span>
+      </div>
+    </div>
+    <p class="verdict" id="mint-verdict"></p>
+  </section>
+
+  <section aria-labelledby="ledger-h">
+    <h2 id="ledger-h">Ledger at the latest sweep</h2>
+    <p class="lede">Straight from the referee's state, positions and flow posts.</p>
+    <div class="facts">
+      <div class="fact"><div class="v" id="f-owners">—</div><div class="k">Owner keys</div></div>
+      <div class="fact"><div class="v" id="f-rooms">—</div><div class="k">Registered trading rooms</div></div>
+      <div class="fact"><div class="v" id="f-open">—</div><div class="k">Open interest</div></div>
+      <div class="fact"><div class="v" id="f-longs">—</div><div class="k">Longs</div></div>
+      <div class="fact"><div class="v" id="f-shorts">—</div><div class="k">Shorts</div></div>
+      <div class="fact"><div class="v" id="f-sv">—</div><div class="k">Settled / void this sweep</div></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="board-h">
+    <h2 id="board-h">Boards</h2>
+    <p class="lede">The top lists the referee publishes each sweep, shown as posted.</p>
+    <div class="boards">
+      <div>
+        <h3>PnL <span class="price-meta" id="pnl-mark"></span></h3>
+        <div class="scroll" id="pnl-board"><p class="empty">Waiting for the PnL room.</p></div>
+      </div>
+      <div>
+        <h3>Positions</h3>
+        <div class="scroll" id="pos-board"><p class="empty">Waiting for the positions room.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="check-h">
+    <h2 id="check-h">Referee check</h2>
+    <p class="lede">Every post is re-verified here: its Ed25519 signature over <code>room|nonce|text</code> is checked against the did:key that wrote it. No key ever leaves or enters this page.</p>
+    <div class="check-grid" id="check-grid"></div>
+    <p class="signer" id="signer-line"></p>
+    <div class="pin">
+      <label for="pin-input" class="price-meta" style="flex-basis:100%">Paste the referee DID from the official launch record to compare:</label>
+      <input id="pin-input" type="text" placeholder="did:key:z6Mk…" autocomplete="off" spellcheck="false">
+      <button id="pin-btn" type="button">Compare</button>
+    </div>
+    <p class="pin-result" id="pin-result" aria-live="polite"></p>
+  </section>
+
+  <footer>
+    <p>Kapanış reads the five referee rooms of close-1 through a read-only proxy and keeps the newest 200 posts per room, about 16 hours of sweeps. It holds no keys and posts nothing. Rules and the fold are published by FLOP Labs in the contest repository.</p>
+    <p>Built by <a href="https://x.com/Dnyelfy">@Dnyelfy</a>. Source on <a href="https://github.com/Dnyelfy/kapanis">GitHub</a>.</p>
+  </footer>
+</div>
+
+<script>
+// CORE-START
+const CONTEST = {
+  opening: Date.parse("2026-09-25T12:00:00Z"),
+  firstSweep: Date.parse("2026-09-25T12:05:00Z"),
+  sweepMs: 300000,
+  lockSweep: 2556,
+  lock: Date.parse("2026-10-04T09:00:00Z"),
+  finalAt: Date.parse("2026-10-04T10:00:00Z"),
+  window: 0.05,
+};
+const ROOMS = ["d-close1-price", "d-close1-flow", "d-close1-state", "d-close1-positions", "d-close1-pnl"];
+
+// Nonces can be 19 digits, past 2^53: keep them as exact strings before JSON.parse.
+function parseRoomJson(raw) {
+  const safe = raw.replace(/"nonce":(\d+)/g, '"nonce":"$1"');
+  const view = JSON.parse(safe);
+  if (!view || !Array.isArray(view.messages)) throw new Error("unexpected reply shape");
+  return view;
+}
+
+const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+function base58decode(str) {
+  let bytes = [0];
+  for (const ch of str) {
+    const v = B58.indexOf(ch);
+    if (v < 0) throw new Error("bad base58");
+    let carry = v;
+    for (let i = 0; i < bytes.length; i++) {
+      carry += bytes[i] * 58;
+      bytes[i] = carry & 0xff;
+      carry >>= 8;
+    }
+    while (carry > 0) { bytes.push(carry & 0xff); carry >>= 8; }
+  }
+  for (const ch of str) { if (ch === "1") bytes.push(0); else break; }
+  return new Uint8Array(bytes.reverse());
+}
+
+function didPublicKey(did) {
+  if (typeof did !== "string" || !did.startsWith("did:key:z")) return null;
+  let b;
+  try { b = base58decode(did.slice(9)); } catch (e) { return null; }
+  if (b.length !== 34 || b[0] !== 0xed || b[1] !== 0x01) return null;
+  return b.slice(2);
+}
+
+function b64urlDecode(s) {
+  const pad = s.length % 4 === 2 ? "==" : s.length % 4 === 3 ? "=" : "";
+  const bin = atob(s.replace(/-/g, "+").replace(/_/g, "/") + pad);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+function verifyRecord(room, rec, naclLib) {
+  if (!rec || typeof rec.sig !== "string" || rec.nonce === undefined) return false;
+  const pk = didPublicKey(rec.from);
+  if (!pk) return false;
+  let sig;
+  try { sig = b64urlDecode(rec.sig.slice(0, 86)); } catch (e) { return false; }
+  if (sig.length !== 64) return false;
+  const msg = new TextEncoder().encode(`${room}|${String(rec.nonce)}|${rec.text}`);
+  try { return naclLib.sign.detached.verify(msg, sig, pk); } catch (e) { return false; }
+}
+
+function parsePost(rec) {
+  if (!rec || typeof rec.text !== "string") return null;
+  const t = rec.text.trim();
+  if (!t.startsWith("{")) return null;
+  try {
+    const obj = JSON.parse(t);
+    return obj && typeof obj === "object" ? obj : null;
+  } catch (e) { return null; }
+}
+
+function num(v) {
+  if (v === null || v === undefined || v === "") return null;
+  const n = typeof v === "number" ? v : parseFloat(String(v));
+  return Number.isFinite(n) ? n : null;
+}
+
+// Posts of one type, one per sweep number, newest wins.
+function bySweep(posts, type) {
+  const map = new Map();
+  for (const p of posts) {
+    if (p && p.t === type && Number.isInteger(p.n)) map.set(p.n, p);
+  }
+  return [...map.values()].sort((a, b) => a.n - b.n);
+}
+
+function mintCount(flow) {
+  if (Array.isArray(flow.mints)) return flow.mints.length;
+  const n = num(flow.mints);
+  return n === null ? 0 : n;
+}
+
+function mintHealth(flows) {
+  if (!flows.length) return null;
+  const latest = flows[flows.length - 1].n;
+  let lastMint = null;
+  for (const f of flows) if (mintCount(f) > 0) lastMint = f.n;
+  return {
+    latest,
+    first: flows[0].n,
+    lastMint,
+    quiet: lastMint === null ? flows.length : latest - lastMint,
+  };
+}
+
+function expectedSweep(now) {
+  if (now < CONTEST.firstSweep) return 0;
+  return Math.min(CONTEST.lockSweep, Math.floor((now - CONTEST.firstSweep) / CONTEST.sweepMs) + 1);
+}
+
+function limitsFrom(price) {
+  if (Array.isArray(price.limits) && price.limits.length === 2) {
+    const lo = num(price.limits[0]), hi = num(price.limits[1]);
+    if (lo !== null && hi !== null) return [lo, hi];
+  }
+  const ref = price.ref ? num(price.ref.px) : null;
+  return ref === null ? null : [ref * (1 - CONTEST.window), ref * (1 + CONTEST.window)];
+}
+
+function countdown(ms) {
+  if (ms <= 0) return "0m";
+  const m = Math.floor(ms / 60000);
+  const d = Math.floor(m / 1440), h = Math.floor((m % 1440) / 60), mm = m % 60;
+  return (d ? d + "d " : "") + (d || h ? h + "h " : "") + mm + "m";
+}
+// CORE-END
+
+const $ = (id) => document.getElementById(id);
+const fmt = (v, d = 2) => {
+  const n = num(v);
+  return n === null ? "—" : n.toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
+};
+const fmtInt = (v) => {
+  const n = num(v);
+  return n === null ? "—" : Math.round(n).toLocaleString("en-US");
+};
+function ago(ts) {
+  const t = Date.parse(ts);
+  if (!Number.isFinite(t)) return "";
+  const s = Math.max(0, Math.round((Date.now() - t) / 1000));
+  if (s < 60) return s + "s ago";
+  if (s < 3600) return Math.round(s / 60) + " min ago";
+  return Math.round(s / 3600) + " h ago";
+}
+
+let state = { rooms: {}, fetchedAt: null };
+
+async function loadRoom(name) {
+  const r = await fetch(`/api/room?name=${encodeURIComponent(name)}&limit=200`, { cache: "no-store" });
+  const raw = await r.text();
+  if (!r.ok) throw new Error(`${name}: ${raw.trim().slice(0, 160) || "HTTP " + r.status}`);
+  const view = parseRoomJson(raw);
+  const records = view.messages;
+  const verified = records.map((rec) => verifyRecord(name, rec, window.nacl));
+  const posts = records.map(parsePost);
+  return { name, records, verified, posts };
+}
+
+async function refresh() {
+  const btn = $("refresh");
+  btn.disabled = true;
+  $("error").style.display = "none";
+  const results = await Promise.allSettled(ROOMS.map(loadRoom));
+  const errors = [];
+  results.forEach((res, i) => {
+    if (res.status === "fulfilled") state.rooms[ROOMS[i]] = res.value;
+    else errors.push(res.reason && res.reason.message ? res.reason.message : ROOMS[i] + ": failed");
+  });
+  state.fetchedAt = Date.now();
+  if (errors.length) {
+    $("error").textContent = "Some rooms could not be read, the rest is shown. " + errors.join(" | ");
+    $("error").style.display = "block";
+  }
+  render();
+  btn.disabled = false;
+}
+
+// Only posts whose signature verified are used anywhere on the page.
+function goodPosts(name) {
+  const r = state.rooms[name];
+  if (!r) return [];
+  return r.posts.filter((p, i) => p && r.verified[i]);
+}
+
+function render() {
+  renderHero();
+  renderStrip();
+  renderLedger();
+  renderBoards();
+  renderCheck();
+  $("updated").textContent = "Updated " + new Date(state.fetchedAt).toUTCString().slice(17, 25) + " UTC";
+}
+
+function renderHero() {
+  const pricePosts = goodPosts("d-close1-price");
+  const prices = bySweep(pricePosts, "price");
+  const final = pricePosts.filter((p) => p.t === "final").pop();
+  const latest = prices[prices.length - 1];
+  const now = Date.now();
+
+  if (latest && latest.ref) {
+    $("ref-px").textContent = "$" + fmt(latest.ref.px);
+    const t = latest.ref.time ? new Date(latest.ref.time) : null;
+    $("ref-meta").textContent =
+      "Posted at sweep " + latest.n + (t && !isNaN(t) ? ", Hyperliquid trade at " + t.toUTCString().slice(17, 25) + " UTC" : "");
+    const lim = limitsFrom(latest);
+    if (lim) {
+      const [lo, hi] = lim;
+      const g = num(latest.global);
+      const span = hi - lo;
+      const pad = span * 0.25;
+      const min = lo - pad, max = hi + pad;
+      const pos = (v) => ((v - min) / (max - min)) * 100;
+      $("band-fill").style.left = pos(lo) + "%";
+      $("band-fill").style.width = pos(hi) - pos(lo) + "%";
+      if (g !== null) {
+        $("band-mark").style.display = "block";
+        $("band-mark").style.left = `calc(${Math.min(100, Math.max(0, pos(g)))}% - 1px)`;
+      } else {
+        $("band-mark").style.display = "none";
+      }
+      $("band-lo").textContent = "Low limit " + fmt(lo);
+      $("band-mid").textContent = g !== null ? "Global price " + fmt(g) : "";
+      $("band-hi").textContent = "High limit " + fmt(hi);
+      $("band").hidden = false;
+    }
+  }
+
+  const beforeLock = now < CONTEST.lock;
+  $("clock-label").textContent = beforeLock ? "Trading locks in" : now < CONTEST.finalAt ? "Closing price is taken in" : "Contest closed";
+  $("countdown").textContent = beforeLock
+    ? countdown(CONTEST.lock - now)
+    : now < CONTEST.finalAt ? countdown(CONTEST.finalAt - now) : "Locked";
+
+  const expected = expectedSweep(now);
+  if (latest) {
+    $("sweep-line").textContent = `Sweep ${latest.n.toLocaleString("en-US")} of ${CONTEST.lockSweep.toLocaleString("en-US")}`;
+    const behind = expected - latest.n;
+    $("sched-line").textContent = behind > 1
+      ? `The clock says sweep ${expected}: the price room is ${behind} sweeps behind.`
+      : "The price room is on schedule.";
+  }
+
+  if (final) {
+    $("final-px").textContent = "$" + fmt(final.price);
+    const tt = final.trade && final.trade.time ? new Date(final.trade.time) : null;
+    $("final-meta").textContent = "Hyperliquid trade" + (final.trade && final.trade.tid ? " " + final.trade.tid : "") +
+      (tt && !isNaN(tt) ? " at " + tt.toUTCString().slice(5, 25) + " UTC" : "") + ". Final under the rules.";
+    $("final-box").hidden = false;
+  }
+}
+
+function renderStrip() {
+  const flows = bySweep(goodPosts("d-close1-flow"), "flow");
+  const canvas = $("strip");
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  canvas.width = w * dpr; canvas.height = h * dpr;
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  const css = getComputedStyle(document.documentElement);
+  const c = (v) => css.getPropertyValue(v).trim();
+
+  if (!flows.length) {
+    ctx.fillStyle = c("--muted");
+    ctx.font = "14px Archivo, sans-serif";
+    ctx.fillText("No verified flow posts yet.", 8, h / 2);
+    $("mint-verdict").textContent = "";
+    $("strip-range").textContent = "";
+    return;
+  }
+
+  const first = flows[0].n, last = flows[flows.length - 1].n;
+  const cols = Math.max(1, last - first + 1);
+  const colW = w / cols;
+  const mid = Math.round(h * 0.55);
+  const maxMint = Math.max(1, ...flows.map(mintCount));
+  const maxTrades = Math.max(1, ...flows.map((f) => (num(f.settled) || 0) + (num(f.void) || 0)));
+
+  ctx.fillStyle = c("--line");
+  ctx.fillRect(0, mid, w, 1);
+
+  for (const f of flows) {
+    const x = (f.n - first) * colW;
+    const bw = Math.max(1, colW - (colW > 3 ? 1 : 0));
+    const m = mintCount(f);
+    const mh = (m / maxMint) * (mid - 6);
+    ctx.fillStyle = c("--teal");
+    ctx.fillRect(x, mid - mh, bw, mh);
+    const s = num(f.settled) || 0, v = num(f.void) || 0;
+    const room = h - mid - 4;
+    const sh = (s / maxTrades) * room, vh = (v / maxTrades) * room;
+    ctx.fillStyle = c("--ink");
+    ctx.fillRect(x, mid + 1, bw, sh);
+    ctx.fillStyle = c("--red");
+    ctx.fillRect(x, mid + 1 + sh, bw, vh);
+  }
+
+  $("strip-range").textContent = `Sweeps ${first}–${last}, peak ${maxMint} mints and ${maxTrades} trades in one sweep`;
+  const hlth = mintHealth(flows);
+  const v = $("mint-verdict");
+  if (hlth.quiet >= 3) {
+    v.className = "verdict warn";
+    v.textContent = hlth.lastMint === null
+      ? `No keys minted in any of the ${flows.length} sweeps shown.`
+      : `No keys minted for ${hlth.quiet} sweeps. The last mint was at sweep ${hlth.lastMint}.`;
+  } else {
+    v.className = "verdict ok";
+    v.textContent = `Keys are being minted. The last mint was at sweep ${hlth.lastMint}.`;
+  }
+}
+
+function renderLedger() {
+  const st = bySweep(goodPosts("d-close1-state"), "state").pop();
+  const pos = bySweep(goodPosts("d-close1-positions"), "positions").pop();
+  const fl = bySweep(goodPosts("d-close1-flow"), "flow").pop();
+  $("f-owners").textContent = st ? fmtInt(st.owners) : "—";
+  $("f-rooms").textContent = st ? fmtInt(st.rooms) : "—";
+  $("f-open").textContent = pos ? fmt(pos.open) : "—";
+  $("f-longs").textContent = pos ? fmt(pos.longs) : "—";
+  $("f-shorts").textContent = pos ? fmt(pos.shorts) : "—";
+  $("f-sv").textContent = fl ? `${fmtInt(fl.settled)} / ${fmtInt(fl.void)}` : "—";
+}
+
+// The rules fix the rooms but not the shape of each "top" entry, so show entries as posted.
+function tableFromTop(top) {
+  if (!Array.isArray(top) || !top.length) return '<p class="empty">The referee posted an empty list.</p>';
+  const esc = (s) => String(s).replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch]));
+  const cell = (v) => {
+    const s = typeof v === "object" && v !== null ? JSON.stringify(v) : String(v);
+    const isNum = num(v) !== null && !/^did:/.test(s);
+    return `<td class="${isNum ? "num" : /^did:/.test(s) ? "did" : ""}">${esc(s)}</td>`;
+  };
+  if (top.every((e) => e && typeof e === "object" && !Array.isArray(e))) {
+    const keys = [...new Set(top.flatMap((e) => Object.keys(e)))];
+    return `<table><thead><tr><th>#</th>${keys.map((k) => `<th>${esc(k)}</th>`).join("")}</tr></thead><tbody>` +
+      top.map((e, i) => `<tr><td>${i + 1}</td>${keys.map((k) => cell(e[k] ?? "")).join("")}</tr>`).join("") + "</tbody></table>";
+  }
+  return `<table><tbody>` + top.map((e, i) =>
+    `<tr><td>${i + 1}</td>${(Array.isArray(e) ? e : [e]).map(cell).join("")}</tr>`).join("") + "</tbody></table>";
+}
+
+function renderBoards() {
+  const pnl = bySweep(goodPosts("d-close1-pnl"), "pnl").pop();
+  const pos = bySweep(goodPosts("d-close1-positions"), "positions").pop();
+  $("pnl-mark").textContent = pnl && pnl.mark !== undefined ? `marked at ${fmt(pnl.mark)}, sweep ${pnl.n}` : "";
+  $("pnl-board").innerHTML = pnl ? tableFromTop(pnl.top) : '<p class="empty">No verified PnL post yet.</p>';
+  $("pos-board").innerHTML = pos ? tableFromTop(pos.top) : '<p class="empty">No verified positions post yet.</p>';
+}
+
+function renderCheck() {
+  const grid = $("check-grid");
+  grid.innerHTML = "";
+  const signers = new Set();
+  for (const name of ROOMS) {
+    const r = state.rooms[name];
+    const div = document.createElement("div");
+    if (!r) {
+      div.className = "room bad";
+      div.innerHTML = `<b>${name}</b>Not read`;
+    } else {
+      const total = r.records.length;
+      const ok = r.verified.filter(Boolean).length;
+      r.records.forEach((rec, i) => { if (r.verified[i]) signers.add(rec.from); });
+      div.className = "room " + (total && ok === total ? "good" : "bad");
+      div.innerHTML = `<b>${name}</b>${ok} of ${total} posts verified`;
+    }
+    grid.appendChild(div);
+  }
+  const line = $("signer-line");
+  if (signers.size === 1) {
+    const d = [...signers][0];
+    line.innerHTML = "All verified posts are signed by one key: <span class=\"did\"></span>";
+    line.querySelector(".did").textContent = d;
+  } else if (signers.size > 1) {
+    line.textContent = `Verified posts come from ${signers.size} different keys. The referee should be one key: check the launch record.`;
+  } else {
+    line.textContent = "No verified posts yet.";
+  }
+  state.signers = signers;
+  comparePin(false);
+}
+
+function comparePin(fromClick) {
+  const val = $("pin-input").value.trim();
+  const out = $("pin-result");
+  if (!val) { out.textContent = fromClick ? "Paste a did:key first." : ""; out.className = "pin-result"; return; }
+  if (!didPublicKey(val)) { out.textContent = "That is not a valid Ed25519 did:key."; out.className = "pin-result bad"; return; }
+  const s = state.signers || new Set();
+  if (s.size === 1 && s.has(val)) {
+    out.textContent = "Match: every verified post was signed by this DID.";
+    out.className = "pin-result ok";
+  } else {
+    out.textContent = "No match: the posts here were not all signed by this DID.";
+    out.className = "pin-result bad";
+  }
+}
+
+$("refresh").addEventListener("click", refresh);
+$("pin-btn").addEventListener("click", () => comparePin(true));
+$("pin-input").addEventListener("keydown", (e) => { if (e.key === "Enter") comparePin(true); });
+window.addEventListener("resize", () => { if (state.fetchedAt) renderStrip(); });
+setInterval(() => { if (state.fetchedAt) renderHero(); }, 30000);
+setInterval(refresh, 120000);
+
+if (!window.nacl) {
+  $("error").textContent = "The signature library did not load, so no post can be verified. Check your connection and reload.";
+  $("error").style.display = "block";
+} else {
+  refresh();
+}
+</script>
+</body>
+</html>
