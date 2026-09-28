@@ -1,0 +1,455 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kapanış — close-1 trade desk</title>
+<meta name="description" content="Register, offer and accept close-1 trades with your own did:key. Signing happens in your browser; the key never leaves it.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tweetnacl/1.0.3/nacl-fast.min.js"></script>
+<style>
+  :root {
+    --paper: #E6EAEC; --sheet: #F3F5F6; --ink: #16222B; --muted: #5C6B75;
+    --line: #C3CCD2; --teal: #1E6A6E; --amber: #B86E12; --red: #A33A2E;
+    --font: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { background: var(--paper); color: var(--ink); font-family: var(--font); font-size: 16px; line-height: 1.5; font-variant-numeric: tabular-nums; }
+  a { color: var(--teal); }
+  :focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 28px 20px 64px; }
+  header.top { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: baseline; justify-content: space-between; border-bottom: 2px solid var(--ink); padding-bottom: 12px; }
+  .brand { font-stretch: 125%; font-weight: 800; font-size: 28px; margin: 0; }
+  .brand small { font-stretch: 100%; font-weight: 400; font-size: 15px; color: var(--muted); margin-left: 10px; }
+  .market { display: flex; flex-wrap: wrap; gap: 6px 24px; padding: 14px 0; border-bottom: 1px solid var(--line); font-size: 15px; }
+  .market b { font-stretch: 75%; font-size: 22px; }
+  section { padding: 24px 0; border-bottom: 1px solid var(--line); }
+  section h2 { font-stretch: 112%; font-weight: 700; font-size: 20px; margin: 0 0 4px; }
+  .step { color: var(--muted); font-weight: 400; margin-right: 6px; }
+  .lede { margin: 0 0 14px; color: var(--muted); max-width: 68ch; }
+  button { font: inherit; font-weight: 600; font-size: 14px; background: var(--ink); color: var(--sheet); border: 0; border-radius: 3px; padding: 8px 14px; cursor: pointer; }
+  button.ghost { background: transparent; color: var(--ink); border: 1px solid var(--ink); }
+  button:disabled { opacity: 0.45; cursor: not-allowed; }
+  input, select, textarea { font: inherit; font-size: 15px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 3px; background: var(--sheet); color: var(--ink); }
+  textarea { width: 100%; min-height: 90px; font-size: 13px; }
+  label { display: block; font-size: 14px; color: var(--muted); margin-bottom: 3px; }
+  .row { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; margin-bottom: 12px; }
+  .row > div { flex: 1 1 140px; }
+  .row input, .row select { width: 100%; }
+  .did { word-break: break-all; font-size: 14px; }
+  .msg { font-size: 15px; font-weight: 600; margin: 10px 0 0; }
+  .msg.ok { color: var(--teal); } .msg.bad { color: var(--red); } .msg.warn { color: var(--amber); }
+  .note { background: var(--sheet); border-left: 4px solid var(--amber); padding: 10px 14px; font-size: 14px; margin: 12px 0 0; }
+  .summary { background: var(--sheet); border: 1px solid var(--line); border-radius: 3px; padding: 12px 14px; margin: 12px 0; font-size: 15px; }
+  .offers { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .offers th, .offers td { text-align: left; padding: 7px 10px 7px 0; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  .offers th { color: var(--muted); font-weight: 600; }
+  .scroll { overflow-x: auto; }
+  .locked { opacity: 0.45; pointer-events: none; }
+  footer { padding-top: 22px; font-size: 13px; color: var(--muted); }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1 class="brand">Kapanış<small>close-1 trade desk</small></h1>
+    <a href="/">Back to the board</a>
+  </header>
+
+  <div class="market" id="market">Reading the referee's price room…</div>
+
+  <section>
+    <h2><span class="step">1</span>Load your key</h2>
+    <p class="lede">Choose your Technocore identity file (the JSON with <code>ed25519_seed_hex</code>). It is read in this tab only and forgotten when you close it.</p>
+    <input type="file" id="keyfile" accept=".json,application/json">
+    <p class="did" id="me"></p>
+  </section>
+
+  <section id="s-reg" class="locked">
+    <h2><span class="step">2</span>Register for close-1</h2>
+    <p class="lede">Posts your signed owner message in <code>close1</code>. The next sweep that runs a mint gives your key 10,000 POLF. One registration per key is enough.</p>
+    <div class="row" style="align-items:center">
+      <button id="btn-reg" type="button">Register this key</button>
+      <button id="btn-check" type="button" class="ghost">Check my mint</button>
+    </div>
+    <p class="msg" id="reg-msg" aria-live="polite"></p>
+  </section>
+
+  <section id="s-offer" class="locked">
+    <h2><span class="step">3</span>Make an offer</h2>
+    <p class="lede">You sign the terms. Anyone (or the key you name) can accept by countersigning. Each contract ties up its price in POLF, plus a 1% fee.</p>
+    <div class="row">
+      <div><label for="o-side">I want to</label>
+        <select id="o-side"><option value="buy">Buy (long)</option><option value="sell">Sell (short)</option></select></div>
+      <div><label for="o-qty">Quantity</label><input id="o-qty" inputmode="decimal" value="1"></div>
+      <div><label for="o-px">Price (POLF)</label><input id="o-px" inputmode="decimal"></div>
+      <div><label for="o-valid">Valid for</label>
+        <select id="o-valid"><option value="12">1 hour</option><option value="36">3 hours</option><option value="144">12 hours</option><option value="288">24 hours</option></select></div>
+    </div>
+    <div class="row">
+      <div style="flex-basis:100%"><label for="o-taker">Only this taker (optional did:key, empty means anyone)</label><input id="o-taker" placeholder="did:key:z6Mk… or leave empty" spellcheck="false"></div>
+    </div>
+    <div class="summary" id="o-summary">Fill in quantity and price.</div>
+    <div class="row" style="align-items:center">
+      <button id="btn-offer" type="button">Sign and post offer</button>
+    </div>
+    <p class="msg" id="offer-msg" aria-live="polite"></p>
+    <label for="offer-code" style="margin-top:12px">Offer code, to share anywhere:</label>
+    <textarea id="offer-code" readonly></textarea>
+  </section>
+
+  <section id="s-accept" class="locked">
+    <h2><span class="step">4</span>Accept an offer</h2>
+    <p class="lede">Offers found in the newest 200 messages of <code>close1</code>, with the maker's signature checked. Or paste an offer code someone sent you.</p>
+    <div class="row" style="align-items:center"><button id="btn-scan" type="button" class="ghost">Find offers in close1</button></div>
+    <div class="scroll" id="offer-list"></div>
+    <label for="paste-code" style="margin-top:14px">Offer code:</label>
+    <textarea id="paste-code" placeholder='{"t":"offer","season":"close-1","terms":{…},"maker_sig":"…"}' spellcheck="false"></textarea>
+    <div class="row" style="align-items:center;margin-top:8px"><button id="btn-review" type="button" class="ghost">Review this offer</button></div>
+    <div class="summary" id="a-summary" hidden></div>
+    <div class="row" style="align-items:center"><button id="btn-accept" type="button" disabled>Countersign and post trade</button></div>
+    <p class="msg" id="accept-msg" aria-live="polite"></p>
+  </section>
+
+  <footer>
+    <p>Nothing is settled until the referee's flow room says so. Trades are applied every five minutes; a trade voids if its price is outside the limits, it expired, or either side lacks free POLF.</p>
+    <p>Built by <a href="https://x.com/Dnyelfy">@Dnyelfy</a>. Source on <a href="https://github.com/Dnyelfy/kapanis">GitHub</a>.</p>
+  </footer>
+</div>
+
+<script>
+// CORE-START
+const SEASON = "close-1";
+const DID_RE = /^did:key:z6Mk[1-9A-HJ-NP-Za-km-z]{44}$/;
+const ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
+const AMT_RE = /^[0-9]{1,7}(\.[0-9]{1,2})?$/;
+const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+
+function b58encode(bytes) {
+  let digits = [0];
+  for (const b of bytes) {
+    let carry = b;
+    for (let i = 0; i < digits.length; i++) { carry += digits[i] << 8; digits[i] = carry % 58; carry = (carry / 58) | 0; }
+    while (carry) { digits.push(carry % 58); carry = (carry / 58) | 0; }
+  }
+  let out = "";
+  for (const b of bytes) { if (b === 0) out += "1"; else break; }
+  return out + digits.reverse().map((d) => B58[d]).join("");
+}
+function b58decode(str) {
+  let bytes = [0];
+  for (const ch of str) {
+    const v = B58.indexOf(ch);
+    if (v < 0) throw new Error("bad base58");
+    let carry = v;
+    for (let i = 0; i < bytes.length; i++) { carry += bytes[i] * 58; bytes[i] = carry & 0xff; carry >>= 8; }
+    while (carry > 0) { bytes.push(carry & 0xff); carry >>= 8; }
+  }
+  for (const ch of str) { if (ch === "1") bytes.push(0); else break; }
+  return new Uint8Array(bytes.reverse());
+}
+function didFromPub(pub) {
+  const b = new Uint8Array(34); b[0] = 0xed; b[1] = 0x01; b.set(pub, 2);
+  return "did:key:z" + b58encode(b);
+}
+function pubFromDid(did) {
+  if (!DID_RE.test(did || "")) return null;
+  const b = b58decode(did.slice(9));
+  return b.length === 34 && b[0] === 0xed && b[1] === 0x01 ? b.slice(2) : null;
+}
+function b64url(bytes) {
+  let s = ""; for (const x of bytes) s += String.fromCharCode(x);
+  return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+function unb64url(s) {
+  const pad = s.length % 4 === 2 ? "==" : s.length % 4 === 3 ? "=" : "";
+  const bin = atob(s.replace(/-/g, "+").replace(/_/g, "/") + pad);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+function hexToBytes(hex) {
+  const h = String(hex || "").trim().toLowerCase();
+  if (!/^[0-9a-f]{64}$/.test(h)) throw new Error("ed25519_seed_hex must be 64 hex characters");
+  return new Uint8Array(h.match(/../g).map((x) => parseInt(x, 16)));
+}
+function keyFromFile(json, naclLib) {
+  const seed = hexToBytes(json.ed25519_seed_hex);
+  const kp = naclLib.sign.keyPair.fromSeed(seed);
+  const did = didFromPub(kp.publicKey);
+  if (json.did && json.did !== did) throw new Error("the did in the file does not match its seed");
+  return { did, secretKey: kp.secretKey };
+}
+function sign(naclLib, secretKey, str) {
+  return b64url(naclLib.sign.detached(new TextEncoder().encode(str), secretKey));
+}
+function verify(naclLib, did, sigStr, str) {
+  const pk = pubFromDid(did);
+  if (!pk || typeof sigStr !== "string" || !/^[A-Za-z0-9_-]{86}$/.test(sigStr)) return false;
+  try { return naclLib.sign.detached.verify(new TextEncoder().encode(str), unb64url(sigStr), pk); } catch (e) { return false; }
+}
+
+// The terms: exactly these keys, sorted, no spaces.
+function termsString(t) {
+  return JSON.stringify({ id: t.id, maker: t.maker, px: t.px, qty: t.qty, side: t.side, taker: t.taker, until: t.until });
+}
+function termsProblem(t) {
+  if (!t || typeof t !== "object" || Array.isArray(t)) return "terms missing";
+  const keys = Object.keys(t).sort().join(",");
+  if (keys !== "id,maker,px,qty,side,taker,until") return "terms have the wrong keys";
+  if (!ID_RE.test(t.id)) return "bad id";
+  if (!DID_RE.test(t.maker)) return "bad maker key";
+  if (t.side !== "buy" && t.side !== "sell") return "side must be buy or sell";
+  if (!AMT_RE.test(t.qty) || parseFloat(t.qty) < 0.1) return "quantity must be at least 0.1, two decimals at most";
+  if (!AMT_RE.test(t.px) || parseFloat(t.px) <= 0) return "price must be above 0, two decimals at most";
+  if (t.taker !== "any" && !DID_RE.test(t.taker)) return "taker must be any or a did:key";
+  if (!Number.isInteger(t.until) || t.until < 1) return "until must be a sweep number";
+  return null;
+}
+function makeOffer(naclLib, key, fields, randomId) {
+  const terms = { id: randomId, maker: key.did, px: fields.px, qty: fields.qty, side: fields.side, taker: fields.taker || "any", until: fields.until };
+  const p = termsProblem(terms);
+  if (p) throw new Error(p);
+  const maker_sig = sign(naclLib, key.secretKey, `${SEASON}|terms|${termsString(terms)}`);
+  return { t: "offer", season: SEASON, terms, maker_sig };
+}
+function checkOffer(naclLib, offer) {
+  if (!offer || typeof offer !== "object") return "not an offer";
+  const p = termsProblem(offer.terms);
+  if (p) return p;
+  if (!verify(naclLib, offer.terms.maker, offer.maker_sig, `${SEASON}|terms|${termsString(offer.terms)}`)) return "the maker's signature does not match these terms";
+  return null;
+}
+function makeTrade(naclLib, key, offer) {
+  const ts = termsString(offer.terms);
+  const taker_sig = sign(naclLib, key.secretKey, `${SEASON}|accept|${ts}|${key.did}`);
+  return { t: "trade", season: SEASON, terms: offer.terms, taker: key.did, maker_sig: offer.maker_sig, taker_sig };
+}
+function signedPost(naclLib, key, room, nonce, obj) {
+  const text = JSON.stringify(obj);
+  return { room, did: key.did, nonce: String(nonce), text, sig: sign(naclLib, key.secretKey, `${room}|${nonce}|${text}`) };
+}
+function findOffers(messages) {
+  const out = [];
+  for (const m of messages) {
+    if (typeof m.text !== "string" || !m.text.trim().startsWith("{")) continue;
+    let o; try { o = JSON.parse(m.text); } catch (e) { continue; }
+    if (o && typeof o === "object" && o.terms && typeof o.maker_sig === "string") out.push({ offer: { t: "offer", season: SEASON, terms: o.terms, maker_sig: o.maker_sig }, seq: m.seq, ts: m.ts });
+  }
+  return out;
+}
+function randomId() {
+  const b = new Uint8Array(8); crypto.getRandomValues(b);
+  return Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
+}
+// CORE-END
+
+const $ = (id) => document.getElementById(id);
+let KEY = null;
+let MARKET = null; // {n, ref, lo, hi}
+let lastNonce = 0;
+let pendingOffer = null;
+
+function nextNonce() { lastNonce = Math.max(Date.now(), lastNonce + 1); return lastNonce; }
+function setMsg(id, text, kind) { const e = $(id); e.textContent = text; e.className = "msg" + (kind ? " " + kind : ""); }
+const fmt = (n) => Number(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+async function readRoom(name) {
+  const r = await fetch(`/api/room?name=${encodeURIComponent(name)}&limit=200`, { cache: "no-store" });
+  const raw = await r.text();
+  if (!r.ok) throw new Error(raw.trim().slice(0, 160) || "HTTP " + r.status);
+  return JSON.parse(raw.replace(/"nonce":(\d+)/g, '"nonce":"$1"'));
+}
+
+async function post(p) {
+  const r = await fetch("/api/say", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(p) });
+  const body = (await r.text()).trim();
+  return { ok: r.ok, status: r.status, body };
+}
+
+async function loadMarket() {
+  try {
+    const view = await readRoom("d-close1-price");
+    let latest = null;
+    for (const m of view.messages) {
+      let o; try { o = JSON.parse(m.text); } catch (e) { continue; }
+      if (o && o.t === "price" && Number.isInteger(o.n) && (!latest || o.n > latest.n)) latest = o;
+    }
+    if (!latest || !latest.ref) throw new Error("no price post yet");
+    const ref = parseFloat(latest.ref.px);
+    let lo = ref * 0.95, hi = ref * 1.05;
+    if (Array.isArray(latest.limits) && latest.limits.length === 2) { lo = parseFloat(latest.limits[0]); hi = parseFloat(latest.limits[1]); }
+    MARKET = { n: latest.n, ref, lo, hi };
+    $("market").innerHTML = "";
+    const parts = [["Reference", "$" + fmt(ref)], ["Next sweep limits", fmt(lo) + " – " + fmt(hi)], ["Latest sweep", latest.n]];
+    for (const [k, v] of parts) { const s = document.createElement("span"); s.innerHTML = `${k} <b></b>`; s.querySelector("b").textContent = v; $("market").appendChild(s); }
+    if (!$("o-px").value) $("o-px").value = ref.toFixed(2);
+    updateSummary();
+  } catch (e) {
+    $("market").textContent = "Could not read the price room: " + e.message;
+  }
+}
+
+$("keyfile").addEventListener("change", async (ev) => {
+  const f = ev.target.files[0];
+  if (!f) return;
+  try {
+    const json = JSON.parse(await f.text());
+    KEY = keyFromFile(json, window.nacl);
+    $("me").textContent = "Signing as " + KEY.did;
+    for (const id of ["s-reg", "s-offer", "s-accept"]) $(id).classList.remove("locked");
+    updateSummary();
+  } catch (e) {
+    KEY = null;
+    $("me").textContent = "This file could not be used: " + e.message;
+  }
+  ev.target.value = "";
+});
+
+$("btn-reg").addEventListener("click", async () => {
+  if (!KEY) return;
+  $("btn-reg").disabled = true;
+  setMsg("reg-msg", "Posting…");
+  try {
+    const r = await post(signedPost(window.nacl, KEY, "close1", nextNonce(), { t: "owner", season: SEASON, key: KEY.did }));
+    if (r.ok) setMsg("reg-msg", "Registered. Your key gets its 10,000 POLF at the next sweep that mints. Use Check my mint in a few minutes.", "ok");
+    else setMsg("reg-msg", `technocore.chat refused it (${r.status}): ${r.body.slice(0, 200)}`, "bad");
+  } catch (e) { setMsg("reg-msg", "Could not post: " + e.message, "bad"); }
+  $("btn-reg").disabled = false;
+});
+
+$("btn-check").addEventListener("click", async () => {
+  if (!KEY) return;
+  setMsg("reg-msg", "Reading the flow room…");
+  try {
+    const view = await readRoom("d-close1-flow");
+    let hit = null, first = null, last = null;
+    for (const m of view.messages) {
+      let o; try { o = JSON.parse(m.text); } catch (e) { continue; }
+      if (!o || o.t !== "flow") continue;
+      first = first === null ? o.n : Math.min(first, o.n); last = last === null ? o.n : Math.max(last, o.n);
+      if (Array.isArray(o.mints) && o.mints.includes(KEY.did)) hit = o.n;
+    }
+    if (hit !== null) setMsg("reg-msg", `Minted at sweep ${hit}. Your key holds its 10,000 POLF.`, "ok");
+    else setMsg("reg-msg", `Not in the mint lists of sweeps ${first ?? "?"}–${last ?? "?"}. If you registered recently, minting may be slow: check again later.`, "warn");
+  } catch (e) { setMsg("reg-msg", "Could not read the flow room: " + e.message, "bad"); }
+});
+
+function offerFields() {
+  const qty = $("o-qty").value.trim(), px = $("o-px").value.trim();
+  const valid = parseInt($("o-valid").value, 10);
+  const taker = $("o-taker").value.trim() || "any";
+  return { side: $("o-side").value, qty, px, taker, until: MARKET ? MARKET.n + valid : null };
+}
+
+function updateSummary() {
+  const f = offerFields();
+  const box = $("o-summary");
+  if (!AMT_RE.test(f.qty) || parseFloat(f.qty) < 0.1 || !AMT_RE.test(f.px) || parseFloat(f.px) <= 0) {
+    box.textContent = "Quantity at least 0.1 and a price, two decimals at most."; return;
+  }
+  const q = parseFloat(f.qty), p = parseFloat(f.px);
+  const cost = q * p, fee = cost * 0.01;
+  let line = `You ${f.side === "buy" ? "buy" : "sell"} ${f.qty} NVDA at ${fmt(p)}. Ties up about ${fmt(cost)} POLF plus a fee of at least ${fmt(fee)}.`;
+  if (MARKET && (p < MARKET.lo || p > MARKET.hi)) line += ` This price is outside the current limits (${fmt(MARKET.lo)}–${fmt(MARKET.hi)}), so it would void.`;
+  if (cost + fee > 10000) line += " That is more than a fresh account's 10,000 POLF, so it would void for funds.";
+  box.textContent = line;
+}
+for (const id of ["o-side", "o-qty", "o-px", "o-valid", "o-taker"]) $(id).addEventListener("input", updateSummary);
+
+$("btn-offer").addEventListener("click", async () => {
+  if (!KEY) return;
+  if (!MARKET) return setMsg("offer-msg", "The price room has not loaded yet, so the expiry sweep is unknown.", "bad");
+  let offer;
+  try { offer = makeOffer(window.nacl, KEY, offerFields(), randomId()); }
+  catch (e) { return setMsg("offer-msg", "Fix this first: " + e.message, "bad"); }
+  $("offer-code").value = JSON.stringify(offer);
+  $("btn-offer").disabled = true;
+  setMsg("offer-msg", "Posting…");
+  try {
+    const r = await post(signedPost(window.nacl, KEY, "close1", nextNonce(), offer));
+    if (r.ok) setMsg("offer-msg", `Offer posted in close1, valid until sweep ${offer.terms.until}. It becomes a trade only when someone countersigns and posts it.`, "ok");
+    else setMsg("offer-msg", `Signed, but technocore.chat refused the post (${r.status}): ${r.body.slice(0, 200)}. You can still share the offer code.`, "bad");
+  } catch (e) { setMsg("offer-msg", "Signed, but could not post: " + e.message + ". You can still share the offer code.", "bad"); }
+  $("btn-offer").disabled = false;
+});
+
+function review(offer) {
+  pendingOffer = null;
+  $("btn-accept").disabled = true;
+  const box = $("a-summary");
+  box.hidden = false;
+  const problem = checkOffer(window.nacl, offer);
+  if (problem) { box.textContent = "Cannot accept: " + problem + "."; return; }
+  const t = offer.terms;
+  if (t.maker === KEY.did) { box.textContent = "This is your own offer. A trade with yourself only pays both fees."; return; }
+  if (t.taker !== "any" && t.taker !== KEY.did) { box.textContent = "This offer is reserved for another key."; return; }
+  if (MARKET && MARKET.n + 1 > t.until) { box.textContent = `Expired: it was valid until sweep ${t.until}.`; return; }
+  const mySide = t.side === "buy" ? "sell" : "buy";
+  const p = parseFloat(t.px), q = parseFloat(t.qty);
+  let line = `You ${mySide} ${t.qty} NVDA at ${fmt(p)} to ${t.maker.slice(0, 20)}… Valid until sweep ${t.until}. Ties up about ${fmt(p * q)} POLF plus a fee of at least ${fmt(p * q * 0.01)}.`;
+  if (MARKET && (p < MARKET.lo || p > MARKET.hi)) line += ` Warning: outside the current limits (${fmt(MARKET.lo)}–${fmt(MARKET.hi)}), so it would void.`;
+  box.textContent = line;
+  pendingOffer = offer;
+  $("btn-accept").disabled = false;
+}
+
+$("btn-review").addEventListener("click", () => {
+  if (!KEY) return;
+  let o;
+  try { o = JSON.parse($("paste-code").value.trim()); } catch (e) { $("a-summary").hidden = false; $("a-summary").textContent = "That is not valid JSON."; return; }
+  review({ t: "offer", season: SEASON, terms: o.terms, maker_sig: o.maker_sig });
+});
+
+$("btn-scan").addEventListener("click", async () => {
+  if (!KEY) return;
+  const list = $("offer-list");
+  list.textContent = "Reading close1…";
+  try {
+    const view = await readRoom("close1");
+    const found = findOffers(view.messages).filter(({ offer }) => !checkOffer(window.nacl, offer)
+      && offer.terms.maker !== KEY.did
+      && (offer.terms.taker === "any" || offer.terms.taker === KEY.did)
+      && (!MARKET || offer.terms.until >= MARKET.n + 1));
+    if (!found.length) { list.innerHTML = '<p class="lede">No open offers with a valid signature in the newest 200 messages. Try again in a few minutes, or post your own.</p>'; return; }
+    const tbl = document.createElement("table");
+    tbl.className = "offers";
+    tbl.innerHTML = "<thead><tr><th>Maker</th><th>Maker side</th><th>Qty</th><th>Price</th><th>Until</th><th></th></tr></thead><tbody></tbody>";
+    for (const { offer } of found.reverse()) {
+      const t = offer.terms;
+      const tr = document.createElement("tr");
+      for (const v of [t.maker.slice(0, 18) + "…", t.side, t.qty, t.px, t.until]) { const td = document.createElement("td"); td.textContent = v; tr.appendChild(td); }
+      const td = document.createElement("td");
+      const b = document.createElement("button"); b.type = "button"; b.className = "ghost"; b.textContent = "Review";
+      b.addEventListener("click", () => { $("paste-code").value = JSON.stringify(offer); review(offer); $("a-summary").scrollIntoView({ block: "center" }); });
+      td.appendChild(b); tr.appendChild(td); tbl.querySelector("tbody").appendChild(tr);
+    }
+    list.innerHTML = ""; list.appendChild(tbl);
+  } catch (e) { list.textContent = "Could not read close1: " + e.message; }
+});
+
+$("btn-accept").addEventListener("click", async () => {
+  if (!KEY || !pendingOffer) return;
+  $("btn-accept").disabled = true;
+  setMsg("accept-msg", "Posting…");
+  try {
+    const trade = makeTrade(window.nacl, KEY, pendingOffer);
+    const r = await post(signedPost(window.nacl, KEY, "close1", nextNonce(), trade));
+    if (r.ok) setMsg("accept-msg", "Trade posted. The referee applies it at the next sweep: it settles in full or voids with a reason. Watch the board.", "ok");
+    else { setMsg("accept-msg", `technocore.chat refused it (${r.status}): ${r.body.slice(0, 200)}`, "bad"); $("btn-accept").disabled = false; }
+  } catch (e) { setMsg("accept-msg", "Could not post: " + e.message, "bad"); $("btn-accept").disabled = false; }
+});
+
+if (!window.nacl) {
+  $("market").textContent = "The signing library did not load. Check your connection and reload.";
+} else {
+  loadMarket();
+  setInterval(loadMarket, 120000);
+}
+</script>
+</body>
+</html>

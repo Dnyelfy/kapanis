@@ -1,8 +1,9 @@
 // Read-only proxy for the five close-1 referee rooms on technocore.chat.
 // technocore.chat trusts no browser origin (no CORS), so the page reads through here.
-// No keys, no writes: only these five room names are allowed.
+// No keys, no writes: only the close-1 trading room and the five referee rooms.
 
 const ROOMS = new Set([
+  "close1",
   "d-close1-price",
   "d-close1-flow",
   "d-close1-state",
@@ -14,7 +15,7 @@ module.exports = async (req, res) => {
   const name = String((req.query && req.query.name) || "");
   if (!ROOMS.has(name)) {
     res.setHeader("content-type", "text/plain; charset=utf-8");
-    res.status(400).send("unknown room: only the five close-1 referee rooms can be read here");
+    res.status(400).send("unknown room: only close1 and the five close-1 referee rooms can be read here");
     return;
   }
   let limit = parseInt((req.query && req.query.limit) || "200", 10);
